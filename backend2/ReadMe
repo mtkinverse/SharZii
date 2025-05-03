@@ -1,0 +1,15 @@
+
+set the env and run the daphne server:
+export DJANGO_SETTINGS_MODULE=realTimeMessaging.settings
+daphne -b 0.0.0.0 -p 8000 realTimeMessaging.asgi:application
+
+running redis service:
+sudo service redis-server start
+sudo service redis-server status
+
+checking the ip of WSL (not needed if backend is running on WSL)
+ip addr | grep inet -> look for the global ip address
+
+Force and check the path:
+hash -r
+echo $PATH
