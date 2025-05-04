@@ -31,8 +31,8 @@ const Layout = () => {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <UserProvider>
-      <ModalProvider>
+    <ModalProvider>
+      <UserProvider>
         <BrowserRouter>
           <Routes>
             <Route element={<Layout />} >
@@ -52,7 +52,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             </Route>
           </Routes>
         </BrowserRouter>
-      </ModalProvider>
-    </UserProvider>
+      </UserProvider>
+    </ModalProvider>
   </React.StrictMode>,
 )

@@ -13,3 +13,7 @@ ip addr | grep inet -> look for the global ip address
 Force and check the path:
 hash -r
 echo $PATH
+
+forwarding and cleaning port of WSL:
+netsh interface portproxy add v4tov4 listenport=8000 listenaddress=0.0.0.0 connectport=8000 connectaddress=172.23.198.220
+netsh interface portproxy delete v4tov4 listenport=8000 listenaddress=0.0.0.0

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import axios from 'axios';
 import { useUserContext } from '../contexts/userContext';
+import CallInterface from './CallInterface';
 
 const SelectedConversation = ({ selectedConversation, user, onClose, newMessage, setNewMessage, onSendMessage, onMessagesUpdate }) => {
     const messagesContainerRef = useRef(null);
@@ -10,6 +11,7 @@ const SelectedConversation = ({ selectedConversation, user, onClose, newMessage,
     const [hasMore, setHasMore] = useState(true);
     const { token } = useUserContext();
     const [allowScroll, setAllowScroll] = useState(true);
+    const [isCalling, setIsCalling] = useState(false);
 
     // Load initial messages when conversation is selected
     useEffect(() => {
@@ -156,7 +158,10 @@ const SelectedConversation = ({ selectedConversation, user, onClose, newMessage,
                     <p className="text-xs text-theme-3 opacity-70">{selectedConversation.online ? "Online" : "Offline"}</p>
                 </div>
                 <div className="ml-auto flex space-x-3">
-                    <button className="text-theme-2 hover:text-theme-0 transition-colors bg-theme-3 hover:shadow-md hover:shadow-theme-3/40 rounded-full p-2">
+                    <button 
+                        onClick={() => setIsCalling(true)}
+                        className="text-theme-2 hover:text-theme-0 transition-colors bg-theme-3 hover:shadow-md hover:shadow-theme-3/40 rounded-full p-2"
+                    >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
                             className="h-5 w-5"
@@ -173,7 +178,7 @@ const SelectedConversation = ({ selectedConversation, user, onClose, newMessage,
                         </svg>
                     </button>
                     <button
-                        className="text-theme-3/80 hover:text-theme-3 transition-colors hover:shadow-md  rounded-full p-2"
+                        className="text-theme-3/80 hover:text-theme-3 transition-colors hover:shadow-md rounded-full p-2"
                         onClick={onClose}
                     >
                         <svg
@@ -296,6 +301,14 @@ const SelectedConversation = ({ selectedConversation, user, onClose, newMessage,
                     </button>
                 </form>
             </div>
+
+            {/* Call Interface */}
+            {isCalling && (
+                <CallInterface
+                    receiver={selectedConversation}
+                    onEndCall={() => setIsCalling(false)}
+                />
+            )}
         </>
     );
 };

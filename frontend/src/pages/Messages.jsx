@@ -133,8 +133,8 @@ const Message = () => {
                         {
                             id: 1,
                             text: `Hi ${newConversationUsername}`,
-                            sender: { id: user.id, username: user.username },
-                            receiver: { id: response.data.id, username: newConversationUsername },
+                            sender: user.username,
+                            receiver: newConversationUsername,
                             timestamp: new Date(),
                             is_read: false
                         }
@@ -152,7 +152,7 @@ const Message = () => {
             } else if (error.response?.status === 401) {
                 refreshToken()
             } else {
-                setUserSearchError("An error occurred while searching for the user")
+                setUserSearchError(error.message)
             }
             console.log(error)
         } finally {

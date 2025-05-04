@@ -16,8 +16,9 @@ class SocketManager {
         }
 
         try {
+            const baseUrl = '192.168.0.113'
             // Create WebSocket connection
-            const wsUrl = `ws://localhost:8000/ws/chat/`;
+            const wsUrl = `ws://${baseUrl}:8000/ws/chat/`;
             console.log('Attempting to connect to:', wsUrl);
             this.socket = new WebSocket(wsUrl);
             
@@ -69,6 +70,7 @@ class SocketManager {
                     url: this.socket?.url
                 });
                 this.errorHandlers.forEach(handler => handler(error));
+                
             };
 
             this.socket.onmessage = (event) => {

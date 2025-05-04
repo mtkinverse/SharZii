@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import socketManager from '../socket';
 import axios from 'axios';
+import { useModal } from './modalContext';
 
 const UserContext = createContext();
 
@@ -8,6 +9,10 @@ export const UserProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [conversations, setConversations] = useState([]);
+    const {showModal} = useModal();
+    const callWsRef = useRef(null);
+    const [isCallWsConnected, setIsCallWsConnected] = useState(false);
+    const callMessageHandlerRef = useRef(null);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -76,6 +81,11 @@ export const UserProvider = ({ children }) => {
                     if (error.message === 'Token expired') {
                         refreshToken();
                     }
+                    showModal({
+                        title: "Error",
+                        text: "Failed to connect to the server",
+                        options: {1:'OK'}
+                    });
                 });
 
                 // CLEANUP: remove the handler when effect re-runs or component unmounts
@@ -85,6 +95,11 @@ export const UserProvider = ({ children }) => {
 
             } catch (error) {
                 console.error('WebSocket connection error:', error);
+                showModal({
+                    title: "Error",
+                    text: "Failed to connect to the server",
+                    options: {1:'OK'}
+                });
                 // Handle connection error (e.g., show error message)
             }
         } else {
@@ -92,6 +107,62 @@ export const UserProvider = ({ children }) => {
             socketManager.disconnect();
         }
     }, [token, user]);
+
+    // Initialize call WebSocket when user is authenticated
+    useEffect(() => {
+        if (user?.username) {
+            initializeCallWebSocket();
+        }
+        return () => {
+            if (callWsRef.current) {
+                callWsRef.current.close();
+            }
+        };
+    }, [user?.username]);
+
+    const initializeCallWebSocket = () => {
+        try {
+            const baseUrl = '192.168.0.113';
+            const ws = new WebSocket(`ws://${baseUrl}:8000/ws/call/${user.username}/?token=${token}`);
+            callWsRef.current = ws;
+
+            ws.onopen = () => {
+                setIsCallWsConnected(true);
+                if (callMessageHandlerRef.current) {
+                    ws.onmessage = callMessageHandlerRef.current;
+                }
+                console.log('Call WebSocket connection opened');
+            };
+
+            ws.onerror = (error) => {
+                console.error('Call WebSocket error:', error);
+            };
+
+            ws.onclose = () => {
+                console.log('Call WebSocket connection closed');
+                setIsCallWsConnected(false);
+                // Attempt to reconnect after a delay
+                setTimeout(initializeCallWebSocket, 3000);
+            };
+        } catch (error) {
+            console.error('Error initializing call WebSocket:', error);
+        }
+    };
+
+    const sendCallMessage = (message) => {
+        if (callWsRef.current && callWsRef.current.readyState === WebSocket.OPEN) {
+            callWsRef.current.send(JSON.stringify(message));
+        } else {
+            console.error('Call WebSocket is not connected');
+        }
+    };
+
+    const setCallMessageHandler = (handler) => {
+        callMessageHandlerRef.current = handler;
+        if (callWsRef.current) {
+            callWsRef.current.onmessage = handler;
+        }
+    };
 
     const login = (userData, authToken) => {
         setUser(userData);
@@ -134,8 +205,25 @@ export const UserProvider = ({ children }) => {
         }
     }, [conversations]);
 
+    const value = {
+        user,
+        setUser,
+        token,
+        setToken,
+        conversations,
+        setConversations,
+        sendMessage,
+        refreshToken,
+        callWsRef,
+        isCallWsConnected,
+        sendCallMessage,
+        setCallMessageHandler,
+        login,
+        logout
+    };
+
     return (
-        <UserContext.Provider value={{ user, token, login, logout, conversations, setConversations, sendMessage, refreshToken }}>
+        <UserContext.Provider value={value}>
             {children}
         </UserContext.Provider>
     );
