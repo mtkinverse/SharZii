@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Signup = () => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         username: '',
         password: '',
@@ -29,6 +30,7 @@ const Signup = () => {
         try {
             const response = await axios.post('/api/user/register/', formData, { "headers": { "Content-Type": "application/json" }  });
             console.log('Signup form submitted:', formData);
+            navigate('/login');
             // console.log(response);
         } catch (error) {
             console.log(error);

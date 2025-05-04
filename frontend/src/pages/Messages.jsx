@@ -116,7 +116,7 @@ const Message = () => {
             })
             if (response.status === 200 && response.data) {
                 // User exists, send initial message
-                console.log('whoooooooo user found ', response.data)
+                // console.log('whoooooooo user found ', response.data)
                 // return
                 await sendMessage(response.data.id, `Hi ${newConversationUsername}`)
                 
