@@ -13,7 +13,7 @@ export const UserProvider = ({ children }) => {
     const callWsRef = useRef(null);
     const [isCallWsConnected, setIsCallWsConnected] = useState(false);
     const callMessageHandlerRef = useRef(null);
-
+    const [callConnected,setCallConnected] = useState(false);
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
@@ -23,7 +23,7 @@ export const UserProvider = ({ children }) => {
 
     const messsageHandler = message => {
         setConversations(prevConversations => {
-            console.log('prevConversations', prevConversations, message);
+            
             const isExist = prevConversations.find(ele => ele.id == message.sender_id);
 
             if (isExist) {
@@ -70,8 +70,8 @@ export const UserProvider = ({ children }) => {
         if (token && user) {
             try {
                 // Connect to WebSocket when token and user are available
-                console.log('token', token);
-                console.log('user', user);
+                
+                
                 socketManager.connect(token);
 
                 socketManager.addMessageHandler(messsageHandler);
@@ -122,7 +122,7 @@ export const UserProvider = ({ children }) => {
 
     const initializeCallWebSocket = () => {
         try {
-            const baseUrl = '192.168.0.113';
+            const baseUrl = '192.168.19.192';
             const ws = new WebSocket(`ws://${baseUrl}:8000/ws/call/${user.username}/?token=${token}`);
             callWsRef.current = ws;
 
@@ -219,7 +219,9 @@ export const UserProvider = ({ children }) => {
         sendCallMessage,
         setCallMessageHandler,
         login,
-        logout
+        logout,
+        callConnected,
+        setCallConnected
     };
 
     return (

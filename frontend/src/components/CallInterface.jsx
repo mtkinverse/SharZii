@@ -12,28 +12,46 @@ const CallInterface = ({ receiver, onEndCall }) => {
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const peerConnectionRef = useRef(null);
-    const { user, sendCallMessage, setCallMessageHandler, isCallWsConnected } = useUserContext();
+    const { user, sendCallMessage, setCallMessageHandler, isCallWsConnected, callConnected,  setCallConnected } = useUserContext();
 
     useEffect(() => {
-        initializeCall();
+        if(!callConnected)
+            initializeCall();
+        setCallStatus('connected')
         return () => {
             cleanup();
         };
     }, []);
 
     const updateCallStatus = (status, error = null) => {
-        console.log(`Call status update: ${status}${error ? ` - Error: ${error}` : ''}`);
+        
+        if (status == 'connected'){
+            setCallStatus('connected')
+            setCallConnected(true);
+            
+            
+        }
+        else 
+        
         setCallStatus(status);
         if (error) {
             setError(error);
         }
     };
 
+    // useEffect(()=>{
+    //     if(callStatus == 'connected'){
+
+    //     }
+    //     setCallConnected(true)
+    // },[callStatus])
+
     const initializeCall = async () => {
         try {
             updateCallStatus('requesting_media');
             // Get local media stream
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
             setLocalStream(stream);
             if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
@@ -54,7 +72,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
             // Monitor connection state changes
             pc.onconnectionstatechange = () => {
-                console.log('Peer connection state:', pc.connectionState);
+                
                 setConnectionState(pc.connectionState);
                 switch (pc.connectionState) {
                     case 'connected':
@@ -83,7 +101,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
             // Handle ICE candidates
             pc.onicecandidate = (event) => {
                 if (event.candidate && isCallWsConnected) {
-                    console.log('New ICE candidate:', event.candidate);
+                    
                     sendCallMessage({
                         type: 'ice-candidate',
                         candidate: event.candidate,
@@ -95,7 +113,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
             // Handle remote stream
             pc.ontrack = (event) => {
-                console.log('Received remote stream');
+                
                 setRemoteStream(event.streams[0]);
                 if (remoteVideoRef.current) {
                     remoteVideoRef.current.srcObject = event.streams[0];
@@ -110,19 +128,19 @@ const CallInterface = ({ receiver, onEndCall }) => {
             setCallMessageHandler(async (event) => {
                 try {
                     const message = JSON.parse(event.data);
-                    console.log('Received WebSocket message:', message);
-                    console.log('Current signaling state:', peerConnectionRef.current?.signalingState);
+                    
+                    
                     
                     switch (message.type) {
                         case 'offer':
                             // Only process offer if we're not the initiator
                             if (!isInitiator) {
-                                console.log('Processing offer from:', message.sender);
-                                console.log('Current signaling state:', peerConnectionRef.current?.signalingState);
+                                
+                                
                                 
                                 // If we're in a non-stable state, close the existing connection and create a new one
                                 if (peerConnectionRef.current?.signalingState !== 'stable') {
-                                    console.log('Non-stable state detected, cleaning up existing connection');
+                                    
                                     cleanup();
                                     await initializeCall();
                                 }
@@ -134,13 +152,13 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
                                 try {
                                     await peerConnectionRef.current.setRemoteDescription(offer);
-                                    console.log('Set remote description with offer, new state:', peerConnectionRef.current.signalingState);
+                                    
                                     
                                     const answer = await peerConnectionRef.current.createAnswer();
-                                    console.log('Created answer:', answer);
+                                    
                                     
                                     await peerConnectionRef.current.setLocalDescription(answer);
-                                    console.log('Set local description with answer, new state:', peerConnectionRef.current.signalingState);
+                                    
                                     
                                     const answerMessage = {
                                         type: 'create-answer',
@@ -177,15 +195,15 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                     });
                                     
                                     await peerConnectionRef.current.setRemoteDescription(answer);
-                                    console.log('Set remote description with answer, new state:', peerConnectionRef.current.signalingState);
+                                    
                                     
                                     // Process any pending ICE candidates
                                     if (peerConnectionRef.current.pendingCandidates && peerConnectionRef.current.pendingCandidates.length > 0) {
-                                        console.log('Processing pending ICE candidates');
+                                        
                                         for (const candidate of peerConnectionRef.current.pendingCandidates) {
                                             try {
                                                 await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-                                                console.log('Added pending ICE candidate');
+                                                
                                             } catch (error) {
                                                 console.error('Error adding pending ICE candidate:', error);
                                             }
@@ -198,7 +216,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                 }
                             } else if (peerConnectionRef.current?.signalingState === 'stable') {
                                 // We're in stable state, need to restart negotiation
-                                console.log('Received answer in stable state, restarting negotiation');
+                                
                                 try {
                                     // Create a new offer
                                     const offer = await peerConnectionRef.current.createOffer();
@@ -211,18 +229,18 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                         sender: user.username,
                                         receiver: receiver.name
                                     };
-                                    console.log('Sending new offer after receiving answer in stable state');
+                                    
                                     sendCallMessage(offerMessage);
                                 } catch (error) {
                                     console.error('Error creating new offer:', error);
                                     updateCallStatus('error', 'Failed to restart negotiation');
                                 }
                             } else {
-                                console.log('Ignoring answer - wrong signaling state:', peerConnectionRef.current?.signalingState);
+                                
                                 // If we're in a non-stable state and not have-local-offer, we might need to restart the connection
                                 if (peerConnectionRef.current?.signalingState !== 'stable' && 
                                     peerConnectionRef.current?.signalingState !== 'have-local-offer') {
-                                    console.log('Non-stable state detected, cleaning up connection');
+                                    
                                     cleanup();
                                     await initializeCall();
                                 }
@@ -230,27 +248,27 @@ const CallInterface = ({ receiver, onEndCall }) => {
                             break;
                         case 'ice-candidate':
                             try {
-                                console.log('Processing ICE candidate from:', message.sender);
-                                console.log('ICE candidate details:', message.candidate);
+                                
+                                
                                 if (peerConnectionRef.current?.remoteDescription) {
-                                    console.log('Adding ICE candidate to peer connection');
+                                    
                                     const candidate = new RTCIceCandidate(message.candidate);
                                     await peerConnectionRef.current.addIceCandidate(candidate);
-                                    console.log('ICE candidate added successfully');
+                                    
                                 } else {
-                                    console.log('Received ICE candidate before remote description, storing for later');
+                                    
                                     if (!peerConnectionRef.current.pendingCandidates) {
                                         peerConnectionRef.current.pendingCandidates = [];
                                     }
                                     peerConnectionRef.current.pendingCandidates.push(message.candidate);
-                                    console.log('Stored pending ICE candidate');
+                                    
                                 }
                             } catch (e) {
                                 console.error('Error adding ICE candidate:', e);
                             }
                             break;
                         default:
-                            console.log('Received unknown message type:', message.type, message);
+                            
                     }
                 } catch (error) {
                     console.error('Error handling WebSocket message:', error);
@@ -272,11 +290,11 @@ const CallInterface = ({ receiver, onEndCall }) => {
         try {
             updateCallStatus('creating_offer');
             const offer = await pc.createOffer();
-            console.log('Created offer:', offer);
+            
             
             // Set local description before sending the offer
             await pc.setLocalDescription(offer);
-            console.log('Set local description with offer, new state:', pc.signalingState);
+            
             
             updateCallStatus('sending_offer');
             setIsInitiator(true);
@@ -287,7 +305,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 sender: user.username,
                 receiver: receiver.name
             };
-            console.log('Sending offer message:', message);
+            
             sendCallMessage(message);
         } catch (error) {
             console.error('Error creating offer:', error);
@@ -303,6 +321,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 track.stop();
                 track.enabled = false;
             });
+            
             setLocalStream(null);
         }
 
@@ -312,8 +331,9 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 track.enabled = false;
             });
             setRemoteStream(null);
+            localVideoRef.current = null
         }
-
+        
         // Close peer connection
         if (peerConnectionRef.current) {
             peerConnectionRef.current.close();
@@ -324,11 +344,15 @@ const CallInterface = ({ receiver, onEndCall }) => {
         setIsInitiator(false);
         setConnectionState('new');
     };
-
+    
     const handleEndCall = () => {
-        console.log('Ending call');
+        setCallConnected(false)
+        
         cleanup();
         onEndCall();
+    localVideoRef. current = null
+    remoteVideoRef. current = null
+    peerConnectionRef. current = null
     };
 
     return (

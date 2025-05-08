@@ -9,7 +9,7 @@ const SelectedConversation = ({ selectedConversation, user, onClose, newMessage,
     const [showGoToBottom, setShowGoToBottom] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
-    const { token } = useUserContext();
+    const { token, callConnected } = useUserContext();
     const [allowScroll, setAllowScroll] = useState(true);
     const [isCalling, setIsCalling] = useState(false);
 
@@ -303,7 +303,7 @@ const SelectedConversation = ({ selectedConversation, user, onClose, newMessage,
             </div>
 
             {/* Call Interface */}
-            {isCalling && (
+            {(isCalling || callConnected) && (
                 <CallInterface
                     receiver={selectedConversation}
                     onEndCall={() => setIsCalling(false)}
