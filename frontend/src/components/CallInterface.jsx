@@ -8,32 +8,33 @@ const CallInterface = ({ receiver, onEndCall }) => {
     const [error, setError] = useState(null);
     const [connectionState, setConnectionState] = useState('new');
     const [isInitiator, setIsInitiator] = useState(false);
-    
+
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const peerConnectionRef = useRef(null);
-    const { user, sendCallMessage, setCallMessageHandler, isCallWsConnected, callConnected,  setCallConnected } = useUserContext();
+    const { user, sendCallMessage, setCallMessageHandler, isCallWsConnected, callConnected, setCallConnected } = useUserContext();
 
     useEffect(() => {
-        if(!callConnected)
+        if (!callConnected)
             initializeCall();
+        else setCallMessageHandler(MessageHandler);
         setCallStatus('connected')
-        return () => {
-            cleanup();
-        };
+        // return () => {
+        //     cleanup();
+        // };
     }, []);
 
     const updateCallStatus = (status, error = null) => {
-        
-        if (status == 'connected'){
+
+        if (status == 'connected') {
             setCallStatus('connected')
             setCallConnected(true);
-            
-            
+
+
         }
-        else 
-        
-        setCallStatus(status);
+        else
+
+            setCallStatus(status);
         if (error) {
             setError(error);
         }
@@ -45,6 +46,176 @@ const CallInterface = ({ receiver, onEndCall }) => {
     //     }
     //     setCallConnected(true)
     // },[callStatus])
+
+    const MessageHandler = async (event) => {
+        try {
+            const message = JSON.parse(event.data);
+
+
+
+            switch (message.type) {
+                case 'offer':
+                    // Only process offer if we're not the initiator
+                    if (!isInitiator) {
+
+
+
+                        // If we're in a non-stable state, close the existing connection and create a new one
+                        // if (peerConnectionRef.current?.signalingState !== 'stable') {
+
+                        //     cleanup();
+                        //     await initializeCall();
+                        // }
+
+                        const offer = new RTCSessionDescription({
+                            type: 'offer',
+                            sdp: message.sdp
+                        });
+
+                        try {
+                            await peerConnectionRef.current.setRemoteDescription(offer);
+
+
+                            const answer = await peerConnectionRef.current.createAnswer();
+
+
+                            await peerConnectionRef.current.setLocalDescription(answer);
+
+
+                            const answerMessage = {
+                                type: 'create-answer',
+                                sdp: answer.sdp,
+                                sender: user.username,
+                                receiver: message.sender
+                            };
+                            console.log('Sending answer message:', answerMessage);
+                            sendCallMessage(answerMessage);
+                        } catch (error) {
+                            console.error('Error processing offer:', error);
+                            updateCallStatus('error', 'Failed to process offer');
+                        }
+                    } else {
+                        console.log('Ignoring offer - we are the initiator');
+                    }
+                    break;
+                case 'answer':
+                    console.log('Received answer, current state:', {
+                        isInitiator,
+                        messageInitiator: message.initiator,
+                        signalingState: peerConnectionRef.current?.signalingState
+                    });
+
+                    if (peerConnectionRef.current?.signalingState === 'have-local-offer' && !peerConnectionRef.current?.currentRemoteDescription) {
+                        // Normal answer processing
+                        updateCallStatus('receiving_answer');
+                        console.log('Processing answer from:', message.sender);
+
+                        try {
+                            const answer = new RTCSessionDescription({
+                                type: 'answer',
+                                sdp: message.sdp
+                            });
+
+                            await peerConnectionRef.current.setRemoteDescription(answer);
+
+
+                            // Process any pending ICE candidates
+                            if (peerConnectionRef.current.pendingCandidates && peerConnectionRef.current.pendingCandidates.length > 0) {
+
+                                for (const candidate of peerConnectionRef.current.pendingCandidates) {
+                                    try {
+                                        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+
+                                    } catch (error) {
+                                        console.error('Error adding pending ICE candidate:', error);
+                                    }
+                                }
+                                peerConnectionRef.current.pendingCandidates = [];
+                            }
+                        } catch (error) {
+                            console.error('Error setting remote description:', error);
+                            updateCallStatus('error', 'Failed to process answer');
+                        }
+                    } else if (peerConnectionRef.current?.signalingState === 'stable') {
+                        // We're in stable state, need to restart negotiation
+
+                        try {
+                            // Create a new offer
+                            const offer = await peerConnectionRef.current.createOffer();
+                            await peerConnectionRef.current.setLocalDescription(offer);
+
+                            // Send the new offer
+                            const offerMessage = {
+                                type: 'create-offer',
+                                sdp: offer.sdp,
+                                sender: user.username,
+                                receiver: receiver.name
+                            };
+
+                            sendCallMessage(offerMessage);
+                        } catch (error) {
+                            console.error('Error creating new offer:', error);
+                            updateCallStatus('error', 'Failed to restart negotiation');
+                        }
+                    } else {
+
+                        // If we're in a non-stable state and not have-local-offer, we might need to restart the connection
+                        if (peerConnectionRef.current?.signalingState !== 'stable' &&
+                            peerConnectionRef.current?.signalingState !== 'have-local-offer') {
+
+                            cleanup();
+                            await initializeCall();
+                        }
+                    }
+                    break;
+                case 'ice-candidate':
+                    try {
+                        if (peerConnectionRef.current?.remoteDescription) {
+                            // Remote description is set, we can add candidates directly
+
+                            // First, add all pending candidates
+                            if (peerConnectionRef.current.pendingCandidates && peerConnectionRef.current.pendingCandidates.length > 0) {
+                                console.log(`Adding ${peerConnectionRef.current.pendingCandidates.length} pending ICE candidates`);
+
+                                for (const pendingCandidate of peerConnectionRef.current.pendingCandidates) {
+                                    try {
+                                        const candidate = new RTCIceCandidate(pendingCandidate);
+                                        await peerConnectionRef.current.addIceCandidate(candidate);
+                                    } catch (candidateError) {
+                                        console.error('Error adding pending ICE candidate:', candidateError);
+                                    }
+                                }
+
+                                // Clear the pending candidates array after processing
+                                peerConnectionRef.current.pendingCandidates = [];
+                            }
+
+                            // Then add the current candidate
+                            const candidate = new RTCIceCandidate(message.candidate);
+                            await peerConnectionRef.current.addIceCandidate(candidate);
+                            console.log('Added ICE candidate directly');
+
+                        } else {
+                            // Remote description not set yet, store candidate for later
+                            if (!peerConnectionRef.current.pendingCandidates) {
+                                peerConnectionRef.current.pendingCandidates = [];
+                            }
+                            peerConnectionRef.current.pendingCandidates.push(message.candidate);
+                            console.log('Stored ICE candidate for later processing');
+                        }
+                    } catch (e) {
+                        console.error('Error adding ICE candidate:', e);
+                    }
+                    break;
+
+                default:
+
+            }
+        } catch (error) {
+            console.error('Error handling WebSocket message:', error);
+            updateCallStatus('error', 'Error processing call data');
+        }
+    }
 
     const initializeCall = async () => {
         try {
@@ -63,7 +234,8 @@ const CallInterface = ({ receiver, onEndCall }) => {
             const configuration = {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' }
                 ]
             };
             const pc = new RTCPeerConnection(configuration);
@@ -72,7 +244,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
             // Monitor connection state changes
             pc.onconnectionstatechange = () => {
-                
+
                 setConnectionState(pc.connectionState);
                 switch (pc.connectionState) {
                     case 'connected':
@@ -101,7 +273,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
             // Handle ICE candidates
             pc.onicecandidate = (event) => {
                 if (event.candidate && isCallWsConnected) {
-                    
+
                     sendCallMessage({
                         type: 'ice-candidate',
                         candidate: event.candidate,
@@ -113,7 +285,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
             // Handle remote stream
             pc.ontrack = (event) => {
-                
+
                 setRemoteStream(event.streams[0]);
                 if (remoteVideoRef.current) {
                     remoteVideoRef.current.srcObject = event.streams[0];
@@ -125,156 +297,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
             };
 
             // Set up WebSocket message handler
-            setCallMessageHandler(async (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    
-                    
-                    
-                    switch (message.type) {
-                        case 'offer':
-                            // Only process offer if we're not the initiator
-                            if (!isInitiator) {
-                                
-                                
-                                
-                                // If we're in a non-stable state, close the existing connection and create a new one
-                                if (peerConnectionRef.current?.signalingState !== 'stable') {
-                                    
-                                    cleanup();
-                                    await initializeCall();
-                                }
-
-                                const offer = new RTCSessionDescription({
-                                    type: 'offer',
-                                    sdp: message.sdp
-                                });
-
-                                try {
-                                    await peerConnectionRef.current.setRemoteDescription(offer);
-                                    
-                                    
-                                    const answer = await peerConnectionRef.current.createAnswer();
-                                    
-                                    
-                                    await peerConnectionRef.current.setLocalDescription(answer);
-                                    
-                                    
-                                    const answerMessage = {
-                                        type: 'create-answer',
-                                        sdp: answer.sdp,
-                                        sender: user.username,
-                                        receiver: message.sender
-                                    };
-                                    console.log('Sending answer message:', answerMessage);
-                                    sendCallMessage(answerMessage);
-                                } catch (error) {
-                                    console.error('Error processing offer:', error);
-                                    updateCallStatus('error', 'Failed to process offer');
-                                }
-                            } else {
-                                console.log('Ignoring offer - we are the initiator');
-                            }
-                            break;
-                        case 'answer':
-                            console.log('Received answer, current state:', {
-                                isInitiator,
-                                messageInitiator: message.initiator,
-                                signalingState: peerConnectionRef.current?.signalingState
-                            });
-                            
-                            if (peerConnectionRef.current?.signalingState === 'have-local-offer') {
-                                // Normal answer processing
-                                updateCallStatus('receiving_answer');
-                                console.log('Processing answer from:', message.sender);
-                                
-                                try {
-                                    const answer = new RTCSessionDescription({
-                                        type: 'answer',
-                                        sdp: message.sdp
-                                    });
-                                    
-                                    await peerConnectionRef.current.setRemoteDescription(answer);
-                                    
-                                    
-                                    // Process any pending ICE candidates
-                                    if (peerConnectionRef.current.pendingCandidates && peerConnectionRef.current.pendingCandidates.length > 0) {
-                                        
-                                        for (const candidate of peerConnectionRef.current.pendingCandidates) {
-                                            try {
-                                                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-                                                
-                                            } catch (error) {
-                                                console.error('Error adding pending ICE candidate:', error);
-                                            }
-                                        }
-                                        peerConnectionRef.current.pendingCandidates = [];
-                                    }
-                                } catch (error) {
-                                    console.error('Error setting remote description:', error);
-                                    updateCallStatus('error', 'Failed to process answer');
-                                }
-                            } else if (peerConnectionRef.current?.signalingState === 'stable') {
-                                // We're in stable state, need to restart negotiation
-                                
-                                try {
-                                    // Create a new offer
-                                    const offer = await peerConnectionRef.current.createOffer();
-                                    await peerConnectionRef.current.setLocalDescription(offer);
-                                    
-                                    // Send the new offer
-                                    const offerMessage = {
-                                        type: 'create-offer',
-                                        sdp: offer.sdp,
-                                        sender: user.username,
-                                        receiver: receiver.name
-                                    };
-                                    
-                                    sendCallMessage(offerMessage);
-                                } catch (error) {
-                                    console.error('Error creating new offer:', error);
-                                    updateCallStatus('error', 'Failed to restart negotiation');
-                                }
-                            } else {
-                                
-                                // If we're in a non-stable state and not have-local-offer, we might need to restart the connection
-                                if (peerConnectionRef.current?.signalingState !== 'stable' && 
-                                    peerConnectionRef.current?.signalingState !== 'have-local-offer') {
-                                    
-                                    cleanup();
-                                    await initializeCall();
-                                }
-                            }
-                            break;
-                        case 'ice-candidate':
-                            try {
-                                
-                                
-                                if (peerConnectionRef.current?.remoteDescription) {
-                                    
-                                    const candidate = new RTCIceCandidate(message.candidate);
-                                    await peerConnectionRef.current.addIceCandidate(candidate);
-                                    
-                                } else {
-                                    
-                                    if (!peerConnectionRef.current.pendingCandidates) {
-                                        peerConnectionRef.current.pendingCandidates = [];
-                                    }
-                                    peerConnectionRef.current.pendingCandidates.push(message.candidate);
-                                    
-                                }
-                            } catch (e) {
-                                console.error('Error adding ICE candidate:', e);
-                            }
-                            break;
-                        default:
-                            
-                    }
-                } catch (error) {
-                    console.error('Error handling WebSocket message:', error);
-                    updateCallStatus('error', 'Error processing call data');
-                }
-            });
+            setCallMessageHandler(MessageHandler);
 
             // Create and send offer
             await createAndSendOffer(pc);
@@ -290,12 +313,12 @@ const CallInterface = ({ receiver, onEndCall }) => {
         try {
             updateCallStatus('creating_offer');
             const offer = await pc.createOffer();
-            
-            
+
+
             // Set local description before sending the offer
             await pc.setLocalDescription(offer);
-            
-            
+
+
             updateCallStatus('sending_offer');
             setIsInitiator(true);
 
@@ -305,7 +328,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 sender: user.username,
                 receiver: receiver.name
             };
-            
+
             sendCallMessage(message);
         } catch (error) {
             console.error('Error creating offer:', error);
@@ -321,7 +344,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 track.stop();
                 track.enabled = false;
             });
-            
+
             setLocalStream(null);
         }
 
@@ -333,7 +356,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
             setRemoteStream(null);
             localVideoRef.current = null
         }
-        
+
         // Close peer connection
         if (peerConnectionRef.current) {
             peerConnectionRef.current.close();
@@ -344,15 +367,15 @@ const CallInterface = ({ receiver, onEndCall }) => {
         setIsInitiator(false);
         setConnectionState('new');
     };
-    
+
     const handleEndCall = () => {
         setCallConnected(false)
-        
+
         cleanup();
         onEndCall();
-    localVideoRef. current = null
-    remoteVideoRef. current = null
-    peerConnectionRef. current = null
+        localVideoRef.current = null
+        remoteVideoRef.current = null
+        peerConnectionRef.current = null
     };
 
     return (
@@ -361,10 +384,9 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold">Call with {receiver.username}</h2>
                     <div className="flex flex-col items-end">
-                        <span className={`px-2 py-1 rounded text-sm ${
-                            callStatus === 'connected' ? 'bg-green-500' : 
+                        <span className={`px-2 py-1 rounded text-sm ${callStatus === 'connected' ? 'bg-green-500' :
                             callStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500'
-                        }`}>
+                            }`}>
                             {callStatus}
                         </span>
                         {connectionState !== 'new' && (
