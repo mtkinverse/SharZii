@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Message, VoiceCall, CustomUser
+from .models import Message, CustomUser
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -22,12 +22,3 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = ['id', 'sender', 'receiver', 'sender_username', 'receiver_username', 'content', 'timestamp', 'is_read']
-
-class VoiceCallSerializer(serializers.ModelSerializer):
-    caller_username = serializers.CharField(source='caller.username', read_only=True)
-    receiver_username = serializers.CharField(source='receiver.username', read_only=True)
-    call_duration = serializers.ReadOnlyField()
-
-    class Meta:
-        model = VoiceCall
-        fields = ['id', 'caller', 'receiver', 'caller_username', 'receiver_username', 'started_at', 'ended_at', 'status', 'webrtc_session_id', 'call_duration']
