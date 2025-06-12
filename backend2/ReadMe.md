@@ -1,4 +1,7 @@
-Step 1:
+First activate the virtual environment: _.\venv\Scripts\activate_
+install all the requirements: _pip install -r requirements.txt_
+
+Step 1 (on WSL):
 running redis service:
 sudo service redis-server start
 sudo service redis-server status
@@ -6,7 +9,7 @@ sudo service redis-server status
 Step 2:
 Run "ipconfig" on Windows and look for "IPv4 Address. . . . . . . . . . . : 192.xxx.xxx.xxx". Now use this ip address as websocket url. For safety, perform port forwarding mentioned below
 
-Step 3:
+Step 3 (Administrator cmd):
 forwarding and cleaning port of WSL:
 netsh interface portproxy add v4tov4 listenport=8000 listenaddress=0.0.0.0 connectport=8000 connectaddress=172.23.198.220
 netsh interface portproxy delete v4tov4 listenport=8000 listenaddress=0.0.0.0
