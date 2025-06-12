@@ -207,6 +207,11 @@ const CallInterface = ({ receiver, onEndCall }) => {
                     }
                     break;
 
+                case 'end-call':
+                    cleanup();
+                    setCallConnected(false);
+                    break;
+
                 default:
 
             }
@@ -442,11 +447,16 @@ const CallInterface = ({ receiver, onEndCall }) => {
         // Reset states
         setIsInitiator(false);
         setConnectionState('new');
+
     };
 
     const handleEndCall = () => {
         setCallConnected(false)
-
+        sendCallMessage({
+            type: 'end-call',
+            sender: user.username,
+            receiver: receiver.name
+        })
         cleanup();
         onEndCall();
         localVideoRef.current = null
