@@ -1,19 +1,26 @@
-
-set the env and run the daphne server:
-export DJANGO_SETTINGS_MODULE=realTimeMessaging.settings
-daphne -b 0.0.0.0 -p 8000 realTimeMessaging.asgi:application
-
+Step 1:
 running redis service:
 sudo service redis-server start
 sudo service redis-server status
 
-checking the ip of WSL (not needed if backend is running on WSL)
-ip addr | grep inet -> look for the global ip address
+Step 2:
+Run "ipconfig" on Windows and look for "IPv4 Address. . . . . . . . . . . : 192.xxx.xxx.xxx". Now use this ip address as websocket url. For safety, perform port forwarding mentioned below
 
+Step 3:
+forwarding and cleaning port of WSL:
+netsh interface portproxy add v4tov4 listenport=8000 listenaddress=0.0.0.0 connectport=8000 connectaddress=172.23.198.220
+netsh interface portproxy delete v4tov4 listenport=8000 listenaddress=0.0.0.0
+
+Step 4:
+set the env and run the daphne server:
+export DJANGO_SETTINGS_MODULE=realTimeMessaging.settings [For linx]
+set DJANGO_SETTINGS_MODULE=realTimeMessaging.settings [For windows]
+
+Step 5 (Run the server):
+daphne -b 0.0.0.0 -p 8000 realTimeMessaging.asgi:application
+
+Additional Commands:
 Force and check the path:
 hash -r
 echo $PATH
 
-forwarding and cleaning port of WSL:
-netsh interface portproxy add v4tov4 listenport=8000 listenaddress=0.0.0.0 connectport=8000 connectaddress=172.23.198.220
-netsh interface portproxy delete v4tov4 listenport=8000 listenaddress=0.0.0.0

@@ -17,7 +17,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
     useEffect(() => {
         if (!callConnected)
             initializeCall();
-        else setCallMessageHandler(MessageHandler);
+        else createPeerConnection();
         setCallStatus('connected')
         // return () => {
         //     cleanup();
@@ -49,6 +49,9 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
     const MessageHandler = async (event) => {
         try {
+
+            if (!peerConnectionRef.current) createPeerConnection();
+
             const message = JSON.parse(event.data);
 
 
@@ -61,11 +64,11 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
 
                         // If we're in a non-stable state, close the existing connection and create a new one
-                        // if (peerConnectionRef.current?.signalingState !== 'stable') {
+                        if (peerConnectionRef.current?.signalingState !== 'stable') {
 
-                        //     cleanup();
-                        //     await initializeCall();
-                        // }
+                            cleanup();
+                            await initializeCall();
+                        }
 
                         const offer = new RTCSessionDescription({
                             type: 'offer',
@@ -88,7 +91,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                 sender: user.username,
                                 receiver: message.sender
                             };
-                            console.log('Sending answer message:', answerMessage);
+
                             sendCallMessage(answerMessage);
                         } catch (error) {
                             console.error('Error processing offer:', error);
@@ -99,11 +102,6 @@ const CallInterface = ({ receiver, onEndCall }) => {
                     }
                     break;
                 case 'answer':
-                    console.log('Received answer, current state:', {
-                        isInitiator,
-                        messageInitiator: message.initiator,
-                        signalingState: peerConnectionRef.current?.signalingState
-                    });
 
                     if (peerConnectionRef.current?.signalingState === 'have-local-offer' && !peerConnectionRef.current?.currentRemoteDescription) {
                         // Normal answer processing
@@ -136,7 +134,8 @@ const CallInterface = ({ receiver, onEndCall }) => {
                             console.error('Error setting remote description:', error);
                             updateCallStatus('error', 'Failed to process answer');
                         }
-                    } else if (peerConnectionRef.current?.signalingState === 'stable') {
+                    }
+                    else if (peerConnectionRef.current?.signalingState === 'stable') {
                         // We're in stable state, need to restart negotiation
 
                         try {
@@ -160,8 +159,8 @@ const CallInterface = ({ receiver, onEndCall }) => {
                     } else {
 
                         // If we're in a non-stable state and not have-local-offer, we might need to restart the connection
-                        if (peerConnectionRef.current?.signalingState !== 'stable' &&
-                            peerConnectionRef.current?.signalingState !== 'have-local-offer') {
+                        console.log('peer connection in ', peerConnectionRef.current?.signalingState)
+                        if (peerConnectionRef.current?.signalingState !== 'have-local-offer') {
 
                             cleanup();
                             await initializeCall();
@@ -169,13 +168,13 @@ const CallInterface = ({ receiver, onEndCall }) => {
                     }
                     break;
                 case 'ice-candidate':
+                    console.log('received Ice candidate');
                     try {
                         if (peerConnectionRef.current?.remoteDescription) {
                             // Remote description is set, we can add candidates directly
 
                             // First, add all pending candidates
                             if (peerConnectionRef.current.pendingCandidates && peerConnectionRef.current.pendingCandidates.length > 0) {
-                                console.log(`Adding ${peerConnectionRef.current.pendingCandidates.length} pending ICE candidates`);
 
                                 for (const pendingCandidate of peerConnectionRef.current.pendingCandidates) {
                                     try {
@@ -193,7 +192,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                             // Then add the current candidate
                             const candidate = new RTCIceCandidate(message.candidate);
                             await peerConnectionRef.current.addIceCandidate(candidate);
-                            console.log('Added ICE candidate directly');
+
 
                         } else {
                             // Remote description not set yet, store candidate for later
@@ -201,7 +200,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                 peerConnectionRef.current.pendingCandidates = [];
                             }
                             peerConnectionRef.current.pendingCandidates.push(message.candidate);
-                            console.log('Stored ICE candidate for later processing');
+
                         }
                     } catch (e) {
                         console.error('Error adding ICE candidate:', e);
@@ -217,11 +216,147 @@ const CallInterface = ({ receiver, onEndCall }) => {
         }
     }
 
+    const createPeerConnection = async () => {
+        const configuration = {
+            iceServers: [
+                // Multiple STUN servers for redundancy
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' },
+
+                // Additional STUN servers
+                { urls: 'stun:stun.stunprotocol.org:3478' },
+                { urls: 'stun:stun.voiparound.com' },
+                { urls: 'stun:stun.voipbuster.com' },
+
+                // TURN servers for restrictive networks (you'll need to set these up)
+                // {
+                //     urls: 'turn:your-turn-server.com:3478',
+                //     username: 'username',
+                //     credential: 'password'
+                // }
+            ],
+            iceCandidatePoolSize: 10, // Generate more candidates
+            iceTransportPolicy: 'all' // Use all available transport methods
+        };
+
+        const pc = new RTCPeerConnection(configuration);
+        peerConnectionRef.current = pc;
+        peerConnectionRef.current.pendingCandidates = [];  // Initialize pending candidates array
+
+        // Monitor connection state changes
+        pc.onconnectionstatechange = async () => {
+
+            setConnectionState(pc.connectionState);
+            switch (pc.connectionState) {
+                case 'connected':
+                    updateCallStatus('connected');
+                    break;
+                case 'disconnected':
+                case 'failed':
+                    updateCallStatus('error', 'Connection failed');
+                    try {
+                        // Create a new offer
+                        const offer = await peerConnectionRef.current.createOffer();
+                        await peerConnectionRef.current.setLocalDescription(offer);
+
+                        // Send the new offer
+                        const offerMessage = {
+                            type: 'create-offer',
+                            sdp: offer.sdp,
+                            sender: user.username,
+                            receiver: receiver.name
+                        };
+
+                        sendCallMessage(offerMessage);
+                    } catch (error) {
+                        console.error('Error creating new offer:', error);
+                        updateCallStatus('error', 'Failed to restart negotiation');
+                    }
+                    break;
+                case 'closed':
+                    updateCallStatus('ended');
+                    break;
+            }
+        };
+
+        // Monitor ICE connection state
+        pc.oniceconnectionstatechange = () => {
+
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate && isCallWsConnected) {
+
+                sendCallMessage({
+                    type: 'ice-candidate',
+                    candidate: event.candidate,
+                    sender: user.username,
+                    receiver: receiver.name
+                });
+
+                // Log candidate types to understand NAT situation
+                if (event.candidate.type === 'host') {
+                    console.log('Local network candidate');
+                } else if (event.candidate.type === 'srflx') {
+                    console.log('STUN server reflexive candidate');
+                } else if (event.candidate.type === 'relay') {
+                    console.log('TURN relay candidate (good for restrictive NATs)');
+                }
+
+            }
+        };
+
+        // Handle remote stream
+        pc.ontrack = (event) => {
+
+            setRemoteStream(event.streams[0]);
+            if (remoteVideoRef.current) {
+                remoteVideoRef.current.srcObject = event.streams[0];
+            }
+            // Update call status when we receive the remote stream
+            if (peerConnectionRef.current?.signalingState === 'stable') {
+                updateCallStatus('connected');
+            }
+        };
+
+        // Set up WebSocket message handler
+        setCallMessageHandler(MessageHandler);
+
+    }
+
+    async function getMedia(constraints = { audio: true }) {
+        try {
+            // Check if modern API is available (desktop)
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                return stream;
+            }
+            // Fallback for older browsers/mobile
+            else if (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia) {
+                const getUserMedia = navigator.getUserMedia ||
+                    navigator.webkitGetUserMedia ||
+                    navigator.mozGetUserMedia;
+
+                return new Promise((resolve, reject) => {
+                    getUserMedia.call(navigator, constraints, resolve, reject);
+                });
+            }
+            else {
+                throw new Error('getUserMedia is not supported in this browser');
+            }
+        } catch (error) {
+            throw new Error(`Media access failed: ${error.message}`);
+        }
+    }
+
     const initializeCall = async () => {
         try {
             updateCallStatus('requesting_media');
             // Get local media stream
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await getMedia({ audio: true });
 
             setLocalStream(stream);
             if (localVideoRef.current) {
@@ -231,80 +366,21 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
             // Create RTCPeerConnection
             updateCallStatus('creating_peer_connection');
-            const configuration = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
-                ]
-            };
-            const pc = new RTCPeerConnection(configuration);
-            peerConnectionRef.current = pc;
-            peerConnectionRef.current.pendingCandidates = [];  // Initialize pending candidates array
 
-            // Monitor connection state changes
-            pc.onconnectionstatechange = () => {
-
-                setConnectionState(pc.connectionState);
-                switch (pc.connectionState) {
-                    case 'connected':
-                        updateCallStatus('connected');
-                        break;
-                    case 'disconnected':
-                    case 'failed':
-                        updateCallStatus('error', 'Connection failed');
-                        break;
-                    case 'closed':
-                        updateCallStatus('ended');
-                        break;
-                }
-            };
-
-            // Monitor ICE connection state
-            pc.oniceconnectionstatechange = () => {
-                console.log('ICE connection state:', pc.iceConnectionState);
-            };
+            createPeerConnection();
 
             // Add local stream to peer connection
             stream.getTracks().forEach(track => {
-                pc.addTrack(track, stream);
+                peerConnectionRef.current.addTrack(track, stream);
             });
 
-            // Handle ICE candidates
-            pc.onicecandidate = (event) => {
-                if (event.candidate && isCallWsConnected) {
-
-                    sendCallMessage({
-                        type: 'ice-candidate',
-                        candidate: event.candidate,
-                        sender: user.username,
-                        receiver: receiver.name
-                    });
-                }
-            };
-
-            // Handle remote stream
-            pc.ontrack = (event) => {
-
-                setRemoteStream(event.streams[0]);
-                if (remoteVideoRef.current) {
-                    remoteVideoRef.current.srcObject = event.streams[0];
-                }
-                // Update call status when we receive the remote stream
-                if (peerConnectionRef.current?.signalingState === 'stable') {
-                    updateCallStatus('connected');
-                }
-            };
-
-            // Set up WebSocket message handler
-            setCallMessageHandler(MessageHandler);
 
             // Create and send offer
-            await createAndSendOffer(pc);
+            await createAndSendOffer(peerConnectionRef.current);
 
         } catch (error) {
             console.error('Call initialization error:', error);
-            updateCallStatus('error', 'Failed to initialize call');
+            updateCallStatus('error', 'Failed to initialize call' + error.message);
             cleanup();
         }
     };
@@ -337,7 +413,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
     };
 
     const cleanup = () => {
-        console.log('Cleaning up call resources');
+
         // Stop all media tracks
         if (localStream) {
             localStream.getTracks().forEach(track => {

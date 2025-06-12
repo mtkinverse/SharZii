@@ -9,11 +9,11 @@ export const UserProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [token, setToken] = useState(localStorage.getItem('token'));
     const [conversations, setConversations] = useState([]);
-    const {showModal} = useModal();
+    const { showModal } = useModal();
     const callWsRef = useRef(null);
     const [isCallWsConnected, setIsCallWsConnected] = useState(false);
     const callMessageHandlerRef = useRef(null);
-    const [callConnected,setCallConnected] = useState(false);
+    const [callConnected, setCallConnected] = useState(false);
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
@@ -23,7 +23,7 @@ export const UserProvider = ({ children }) => {
 
     const messsageHandler = message => {
         setConversations(prevConversations => {
-            
+
             const isExist = prevConversations.find(ele => ele.id == message.sender_id);
 
             if (isExist) {
@@ -70,8 +70,8 @@ export const UserProvider = ({ children }) => {
         if (token && user) {
             try {
                 // Connect to WebSocket when token and user are available
-                
-                
+
+
                 socketManager.connect(token);
 
                 socketManager.addMessageHandler(messsageHandler);
@@ -84,7 +84,7 @@ export const UserProvider = ({ children }) => {
                     showModal({
                         title: "Error",
                         text: "Failed to connect to the server",
-                        options: {1:'OK'}
+                        options: { 1: 'OK' }
                     });
                 });
 
@@ -98,7 +98,7 @@ export const UserProvider = ({ children }) => {
                 showModal({
                     title: "Error",
                     text: "Failed to connect to the server",
-                    options: {1:'OK'}
+                    options: { 1: 'OK' }
                 });
                 // Handle connection error (e.g., show error message)
             }
@@ -122,7 +122,7 @@ export const UserProvider = ({ children }) => {
 
     const initializeCallWebSocket = () => {
         try {
-            const baseUrl = '192.168.19.192';
+            const baseUrl = import.meta.env.VITE_WEBSOCKET_URL;
             const ws = new WebSocket(`ws://${baseUrl}:8000/ws/call/${user.username}/?token=${token}`);
             callWsRef.current = ws;
 
