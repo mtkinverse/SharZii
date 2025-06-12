@@ -16,10 +16,11 @@ class SocketManager {
         }
 
         try {
-            const baseUrl = '192.168.0.113'
+            // const baseUrl = '192.168.0.120'
+            const baseUrl = '192.168.19.192'
             // Create WebSocket connection
             const wsUrl = `ws://${baseUrl}:8000/ws/chat/`;
-            console.log('Attempting to connect to:', wsUrl);
+            
             this.socket = new WebSocket(wsUrl);
             
             // Set up event handlers
@@ -33,16 +34,12 @@ class SocketManager {
                     type: 'auth',
                     token: `Bearer ${token}`
                 };
-                console.log('Sending auth message:', authMessage);
+                
                 this.socket.send(JSON.stringify(authMessage));
             };
 
             this.socket.onclose = (event) => {
-                console.log('WebSocket closed:', {
-                    code: event.code,
-                    reason: event.reason,
-                    wasClean: event.wasClean
-                });
+                
                 this.isConnected = false;
                 
                 // Clear any existing reconnect timeout
@@ -53,7 +50,7 @@ class SocketManager {
                 // Attempt to reconnect if not manually disconnected
                 if (this.reconnectAttempts < this.maxReconnectAttempts) {
                     this.reconnectAttempts++;
-                    console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+                    
                     this.reconnectTimeout = setTimeout(() => {
                         const token = localStorage.getItem('token');
                         if (token) {
@@ -76,11 +73,11 @@ class SocketManager {
             this.socket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    console.log('Received message:', data);
+                    
                     
                     // Handle different message types
                     if (data.type === 'connection_success') {
-                        console.log('Connection established successfully');
+                        
                         this.connectionHandlers.forEach(handler => handler(true));
                     } else if (data.type === 'message') {
                         this.messageHandlers.forEach(handler => handler(data));
@@ -97,7 +94,7 @@ class SocketManager {
 
     disconnect() {
         if (this.socket) {
-            console.log('Disconnecting WebSocket...');
+            
             this.socket.close();
             this.socket = null;
             this.isConnected = false;
@@ -121,7 +118,7 @@ class SocketManager {
             receiver: receiverId,
             content: content
         };
-        console.log('Sending message:', message);
+        
         this.socket.send(JSON.stringify(message));
     }
 
