@@ -17,40 +17,40 @@ class SocketManager {
 
         try {
             // const baseUrl = '192.168.0.120'
-            const baseUrl = '192.168.19.192'
+            const baseUrl = '192.168.1.103'
             // Create WebSocket connection
             const wsUrl = `ws://${baseUrl}:8000/ws/chat/`;
-            
+
             this.socket = new WebSocket(wsUrl);
-            
+
             // Set up event handlers
             this.socket.onopen = () => {
                 console.log('WebSocket connected successfully');
                 this.isConnected = true;
                 this.reconnectAttempts = 0;
-                
+
                 // Send authentication message
                 const authMessage = {
                     type: 'auth',
                     token: `Bearer ${token}`
                 };
-                
+
                 this.socket.send(JSON.stringify(authMessage));
             };
 
             this.socket.onclose = (event) => {
-                
+
                 this.isConnected = false;
-                
+
                 // Clear any existing reconnect timeout
                 if (this.reconnectTimeout) {
                     clearTimeout(this.reconnectTimeout);
                 }
-                
+
                 // Attempt to reconnect if not manually disconnected
                 if (this.reconnectAttempts < this.maxReconnectAttempts) {
                     this.reconnectAttempts++;
-                    
+
                     this.reconnectTimeout = setTimeout(() => {
                         const token = localStorage.getItem('token');
                         if (token) {
@@ -67,17 +67,17 @@ class SocketManager {
                     url: this.socket?.url
                 });
                 this.errorHandlers.forEach(handler => handler(error));
-                
+
             };
 
             this.socket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
-                    
-                    
+
+
                     // Handle different message types
                     if (data.type === 'connection_success') {
-                        
+
                         this.connectionHandlers.forEach(handler => handler(true));
                     } else if (data.type === 'message') {
                         this.messageHandlers.forEach(handler => handler(data));
@@ -94,12 +94,12 @@ class SocketManager {
 
     disconnect() {
         if (this.socket) {
-            
+
             this.socket.close();
             this.socket = null;
             this.isConnected = false;
             this.reconnectAttempts = 0;
-            
+
             // Clear any existing reconnect timeout
             if (this.reconnectTimeout) {
                 clearTimeout(this.reconnectTimeout);
@@ -118,7 +118,7 @@ class SocketManager {
             receiver: receiverId,
             content: content
         };
-        
+
         this.socket.send(JSON.stringify(message));
     }
 

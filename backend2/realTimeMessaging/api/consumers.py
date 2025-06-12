@@ -324,6 +324,19 @@ class CallConsumer(AsyncJsonWebsocketConsumer):
                     'sender': sender
                 }
             )
+        
+        elif message_type == 'end-call':
+            # Send ICE candidate to the other peer
+            target_group = f'call_{receiver}'
+            print(f'Sending end-call from {sender} to {receiver} in group: {target_group}')
+            await self.channel_layer.group_send(
+                target_group,
+                {
+                    'type': 'call_termination',
+                    'sender': sender,
+                    'receiver': receiver
+                }
+            )
         else:
             print(f'Unknown message type: {message_type}')
 
@@ -334,6 +347,14 @@ class CallConsumer(AsyncJsonWebsocketConsumer):
             'sdp': event['sdp'],
             'sender': event['sender'],
             'initiator': event['initiator']
+        })
+    
+    async def call_termination(self, event):
+        print(f'Handling call_termination event: {event} in {self.room_group_name}')
+        await self.send_json({
+            'type': 'end-call',
+            'sender': event['sender'],
+            'receiver': event['receiver']
         })
 
     async def call_answer(self, event):

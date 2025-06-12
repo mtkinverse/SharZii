@@ -8,14 +8,14 @@ const CallInterface = ({ receiver, onEndCall }) => {
     const [error, setError] = useState(null);
     const [connectionState, setConnectionState] = useState('new');
     const [isInitiator, setIsInitiator] = useState(false);
-    
+
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const peerConnectionRef = useRef(null);
-    const { user, sendCallMessage, setCallMessageHandler, isCallWsConnected, callConnected,  setCallConnected } = useUserContext();
+    const { user, sendCallMessage, setCallMessageHandler, isCallWsConnected, callConnected, setCallConnected } = useUserContext();
 
     useEffect(() => {
-        if(!callConnected)
+        if (!callConnected)
             initializeCall();
         setCallStatus('connected')
         return () => {
@@ -24,16 +24,16 @@ const CallInterface = ({ receiver, onEndCall }) => {
     }, []);
 
     const updateCallStatus = (status, error = null) => {
-        
-        if (status == 'connected'){
+
+        if (status == 'connected') {
             setCallStatus('connected')
             setCallConnected(true);
-            
-            
+
+
         }
-        else 
-        
-        setCallStatus(status);
+        else
+
+            setCallStatus(status);
         if (error) {
             setError(error);
         }
@@ -72,7 +72,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
             // Monitor connection state changes
             pc.onconnectionstatechange = () => {
-                
+
                 setConnectionState(pc.connectionState);
                 switch (pc.connectionState) {
                     case 'connected':
@@ -101,7 +101,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
             // Handle ICE candidates
             pc.onicecandidate = (event) => {
                 if (event.candidate && isCallWsConnected) {
-                    
+
                     sendCallMessage({
                         type: 'ice-candidate',
                         candidate: event.candidate,
@@ -113,7 +113,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
             // Handle remote stream
             pc.ontrack = (event) => {
-                
+
                 setRemoteStream(event.streams[0]);
                 if (remoteVideoRef.current) {
                     remoteVideoRef.current.srcObject = event.streams[0];
@@ -128,19 +128,19 @@ const CallInterface = ({ receiver, onEndCall }) => {
             setCallMessageHandler(async (event) => {
                 try {
                     const message = JSON.parse(event.data);
-                    
-                    
-                    
+
+
+
                     switch (message.type) {
                         case 'offer':
                             // Only process offer if we're not the initiator
                             if (!isInitiator) {
-                                
-                                
-                                
+
+
+
                                 // If we're in a non-stable state, close the existing connection and create a new one
                                 if (peerConnectionRef.current?.signalingState !== 'stable') {
-                                    
+
                                     cleanup();
                                     await initializeCall();
                                 }
@@ -152,14 +152,14 @@ const CallInterface = ({ receiver, onEndCall }) => {
 
                                 try {
                                     await peerConnectionRef.current.setRemoteDescription(offer);
-                                    
-                                    
+
+
                                     const answer = await peerConnectionRef.current.createAnswer();
-                                    
-                                    
+
+
                                     await peerConnectionRef.current.setLocalDescription(answer);
-                                    
-                                    
+
+
                                     const answerMessage = {
                                         type: 'create-answer',
                                         sdp: answer.sdp,
@@ -182,28 +182,28 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                 messageInitiator: message.initiator,
                                 signalingState: peerConnectionRef.current?.signalingState
                             });
-                            
+
                             if (peerConnectionRef.current?.signalingState === 'have-local-offer') {
                                 // Normal answer processing
                                 updateCallStatus('receiving_answer');
                                 console.log('Processing answer from:', message.sender);
-                                
+
                                 try {
                                     const answer = new RTCSessionDescription({
                                         type: 'answer',
                                         sdp: message.sdp
                                     });
-                                    
+
                                     await peerConnectionRef.current.setRemoteDescription(answer);
-                                    
-                                    
+
+
                                     // Process any pending ICE candidates
                                     if (peerConnectionRef.current.pendingCandidates && peerConnectionRef.current.pendingCandidates.length > 0) {
-                                        
+
                                         for (const candidate of peerConnectionRef.current.pendingCandidates) {
                                             try {
                                                 await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-                                                
+
                                             } catch (error) {
                                                 console.error('Error adding pending ICE candidate:', error);
                                             }
@@ -216,12 +216,12 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                 }
                             } else if (peerConnectionRef.current?.signalingState === 'stable') {
                                 // We're in stable state, need to restart negotiation
-                                
+
                                 try {
                                     // Create a new offer
                                     const offer = await peerConnectionRef.current.createOffer();
                                     await peerConnectionRef.current.setLocalDescription(offer);
-                                    
+
                                     // Send the new offer
                                     const offerMessage = {
                                         type: 'create-offer',
@@ -229,18 +229,18 @@ const CallInterface = ({ receiver, onEndCall }) => {
                                         sender: user.username,
                                         receiver: receiver.name
                                     };
-                                    
+
                                     sendCallMessage(offerMessage);
                                 } catch (error) {
                                     console.error('Error creating new offer:', error);
                                     updateCallStatus('error', 'Failed to restart negotiation');
                                 }
                             } else {
-                                
+
                                 // If we're in a non-stable state and not have-local-offer, we might need to restart the connection
-                                if (peerConnectionRef.current?.signalingState !== 'stable' && 
+                                if (peerConnectionRef.current?.signalingState !== 'stable' &&
                                     peerConnectionRef.current?.signalingState !== 'have-local-offer') {
-                                    
+
                                     cleanup();
                                     await initializeCall();
                                 }
@@ -248,27 +248,32 @@ const CallInterface = ({ receiver, onEndCall }) => {
                             break;
                         case 'ice-candidate':
                             try {
-                                
-                                
+
+
                                 if (peerConnectionRef.current?.remoteDescription) {
-                                    
+
                                     const candidate = new RTCIceCandidate(message.candidate);
                                     await peerConnectionRef.current.addIceCandidate(candidate);
-                                    
+
                                 } else {
-                                    
+
                                     if (!peerConnectionRef.current.pendingCandidates) {
                                         peerConnectionRef.current.pendingCandidates = [];
                                     }
                                     peerConnectionRef.current.pendingCandidates.push(message.candidate);
-                                    
+
                                 }
                             } catch (e) {
                                 console.error('Error adding ICE candidate:', e);
                             }
                             break;
+
+                        case 'end-call':
+                            cleanup();
+                            setCallConnected(false);
+
                         default:
-                            
+
                     }
                 } catch (error) {
                     console.error('Error handling WebSocket message:', error);
@@ -290,12 +295,12 @@ const CallInterface = ({ receiver, onEndCall }) => {
         try {
             updateCallStatus('creating_offer');
             const offer = await pc.createOffer();
-            
-            
+
+
             // Set local description before sending the offer
             await pc.setLocalDescription(offer);
-            
-            
+
+
             updateCallStatus('sending_offer');
             setIsInitiator(true);
 
@@ -305,7 +310,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 sender: user.username,
                 receiver: receiver.name
             };
-            
+
             sendCallMessage(message);
         } catch (error) {
             console.error('Error creating offer:', error);
@@ -321,7 +326,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 track.stop();
                 track.enabled = false;
             });
-            
+
             setLocalStream(null);
         }
 
@@ -333,7 +338,7 @@ const CallInterface = ({ receiver, onEndCall }) => {
             setRemoteStream(null);
             localVideoRef.current = null
         }
-        
+
         // Close peer connection
         if (peerConnectionRef.current) {
             peerConnectionRef.current.close();
@@ -343,16 +348,21 @@ const CallInterface = ({ receiver, onEndCall }) => {
         // Reset states
         setIsInitiator(false);
         setConnectionState('new');
+
     };
-    
+
     const handleEndCall = () => {
         setCallConnected(false)
-        
+        sendCallMessage({
+            type: 'end-call',
+            sender: user.username,
+            receiver: receiver.name
+        })
         cleanup();
         onEndCall();
-    localVideoRef. current = null
-    remoteVideoRef. current = null
-    peerConnectionRef. current = null
+        localVideoRef.current = null
+        remoteVideoRef.current = null
+        peerConnectionRef.current = null
     };
 
     return (
@@ -361,10 +371,9 @@ const CallInterface = ({ receiver, onEndCall }) => {
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold">Call with {receiver.username}</h2>
                     <div className="flex flex-col items-end">
-                        <span className={`px-2 py-1 rounded text-sm ${
-                            callStatus === 'connected' ? 'bg-green-500' : 
+                        <span className={`px-2 py-1 rounded text-sm ${callStatus === 'connected' ? 'bg-green-500' :
                             callStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500'
-                        }`}>
+                            }`}>
                             {callStatus}
                         </span>
                         {connectionState !== 'new' && (
